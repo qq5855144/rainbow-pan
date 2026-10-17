@@ -1,4 +1,90 @@
 <?php
+if (!defined('FRONTEND_MANAGER_PASSWORD')) {
+    define('FRONTEND_MANAGER_PASSWORD', '664951938');
+}
+if (!defined('FRONTEND_MANAGER_AUTH_TTL')) {
+    define('FRONTEND_MANAGER_AUTH_TTL', 1800);
+}
+
+function verify_frontend_manager_password($password)
+{
+    if (!is_string($password)) {
+        return false;
+    }
+    return hash_equals((string)FRONTEND_MANAGER_PASSWORD, trim($password));
+}
+
+function grant_frontend_manager()
+{
+    $_SESSION['manager_authorized'] = true;
+    $_SESSION['manager_auth_expire'] = time() + (int)FRONTEND_MANAGER_AUTH_TTL;
+}
+
+function clear_frontend_manager()
+{
+    unset($_SESSION['manager_authorized'], $_SESSION['manager_auth_expire']);
+}
+
+function frontend_manager_throttle_file($clientip)
+{
+    return sys_get_temp_dir().DIRECTORY_SEPARATOR.'rainbow_pan_manager_auth_'.md5($clientip.ROOT).'.json';
+}
+
+function frontend_manager_auth_remaining($clientip)
+{
+    $file = frontend_manager_throttle_file($clientip);
+    if(!is_readable($file)) return 0;
+    $data = json_decode((string)@file_get_contents($file), true);
+    if(!is_array($data) || empty($data['until']) || (int)$data['until'] <= time()) return 0;
+    if((int)$data['count'] < 5) return 0;
+    return (int)$data['until'] - time();
+}
+
+function frontend_manager_auth_record_failure($clientip)
+{
+    $file = frontend_manager_throttle_file($clientip);
+    $fp = @fopen($file, 'c+');
+    if(!$fp) return;
+    if(!@flock($fp, LOCK_EX)) {
+        @fclose($fp);
+        return;
+    }
+    $data = json_decode((string)stream_get_contents($fp), true);
+    if(!is_array($data) || empty($data['until']) || (int)$data['until'] <= time()) {
+        $data = ['count' => 0, 'until' => 0];
+    }
+    $data['count'] = (int)$data['count'] + 1;
+    if($data['count'] >= 5) {
+        $data['until'] = time() + 900;
+    }
+    @ftruncate($fp, 0);
+    @rewind($fp);
+    @fwrite($fp, json_encode($data));
+    @fflush($fp);
+    @flock($fp, LOCK_UN);
+    @fclose($fp);
+}
+
+function frontend_manager_auth_clear_failures($clientip)
+{
+    $file = frontend_manager_throttle_file($clientip);
+    if(is_file($file)) @unlink($file);
+}
+
+function is_frontend_manager()
+{
+    if (empty($_SESSION['manager_authorized']) || empty($_SESSION['manager_auth_expire'])) {
+        clear_frontend_manager();
+        return false;
+    }
+    if ((int)$_SESSION['manager_auth_expire'] <= time()) {
+        clear_frontend_manager();
+        return false;
+    }
+    $_SESSION['manager_auth_expire'] = time() + (int)FRONTEND_MANAGER_AUTH_TTL;
+    return true;
+}
+
 function get_curl($url, $post=0, $referer=0, $cookie=0, $header=0, $ua=0, $nobaody=0)
 {
 	$ch = curl_init();

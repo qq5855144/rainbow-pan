@@ -81,6 +81,9 @@ if(isset($_COOKIE["user_token"]))
 	}
 }
 
+if(empty($_SESSION['manager_csrf_token']))$_SESSION['manager_csrf_token'] = bin2hex(random_bytes(32));
+$manager_csrf_token = $_SESSION['manager_csrf_token'];
+
 if(defined('IN_ADMIN')) return;
 
 $denyip = explode('|',$conf['blackip']);
@@ -89,10 +92,18 @@ if(in_array($clientip,$denyip) && !$islogin){
 	exit;
 }
 
-include_once(SYSTEM_ROOT."vendor/autoload.php");
-
-//加载存储模块
-$stor = \lib\StorHelper::getModel($conf['storage']);
+// 存储 SDK 仅在上传、下载、预览和接口请求中需要；普通页面不初始化，减少首屏后端开销。
+$storage_required_scripts = ['ajax.php', 'ajax_file.php', 'api.php', 'down.php', 'view.php'];
+$current_script = basename(parse_url($_SERVER['SCRIPT_NAME'], PHP_URL_PATH));
+if (in_array($current_script, $storage_required_scripts, true)) {
+	if (\lib\StorHelper::is_cloud()) {
+		include_once(SYSTEM_ROOT."vendor/autoload.php");
+	}
+	//加载存储模块
+	$stor = \lib\StorHelper::getModel($conf['storage']);
+} else {
+	$stor = null;
+}
 
 if (!file_exists(ROOT.'install/install.lock') && file_exists(ROOT.'install/index.php')) {
 	sysmsg('<h2>检测到无 install.lock 文件</h2><ul><li><font size="4">如果您尚未安装本程序，请<a href="./install/">前往安装</a></font></li><li><font size="4">如果您已经安装本程序，请手动放置一个空的 install.lock 文件到 /install 文件夹下，<b>为了您站点安全，在您完成它之前我们不会工作。</b></font></li></ul><br/><h4>为什么必须建立 install.lock 文件？</h4>它是安装保护文件，如果检测不到它，就会认为站点还没安装，此时任何人都可以安装/重装你的网站。<br/><br/>');exit;

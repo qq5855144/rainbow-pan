@@ -1,10 +1,6 @@
 <?php
 include("./includes/common.php");
 
-$title = '文件查看 - '.$conf['title'];
-$is_file=true;
-include SYSTEM_ROOT.'header.php';
-
 $csrf_token = md5(mt_rand(0,999).time());
 $_SESSION['csrf_token'] = $csrf_token;
 
@@ -25,28 +21,30 @@ $viewurl_all = $siteurl.$viewurl;
 $thisurl = $siteurl.'file.php?hash='.$row['hash'];
 if(!empty($pwd))$thisurl .= '&pwd='.$pwd;
 
-if($islogin2 && $row['uid']==$uid || !$islogin2 && isset($_SESSION['fileids']) && in_array($row['id'], $_SESSION['fileids']) && strtotime($row['addtime'])>strtotime("-7 days")){
-  $is_mine = true;
-}
-
 $view_type = get_view_type($type);
+$page_title = '文件查看 - '.$conf['title'];
+$panel_title = '<i class="fa fa-file"></i> 文件查看';
+$htmlcode2 = '';
+$linktitle = '';
+$office_url = '';
+$plug = '';
 
 if($view_type == 'image'){
   $filetype = 1;
-  $title = '<i class="fa fa-picture-o"></i> 图片查看器';
+  $panel_title = '<i class="fa fa-picture-o"></i> 图片查看器';
   $htmlcode = htmlspecialchars('<img src="'.$viewurl_all.'"/>');
   $ubbcode = '[img]'.$viewurl_all.'[/img]';
   $linktitle = '图片链接';
 }elseif($view_type == 'audio'){
   $filetype = 2;
-  $title = '<i class="fa fa-music"></i> 音乐播放器';
+  $panel_title = '<i class="fa fa-music"></i> 音乐播放器';
   $htmlcode = htmlspecialchars('<audio id="bgmMusic" src="'.$viewurl_all.'" autoplay="autoplay" loop="loop" preload="auto"></audio>');
   $htmlcode2 = htmlspecialchars('<iframe src="'.$siteurl.'player.php?hash='.$hash.'" width="407" scrolling="no"frameborder="0"height="70"></iframe>');
   $ubbcode = '[audio=X]'.$viewurl_all.'[/audio]';
   $linktitle = '音乐链接';
 }elseif($view_type == 'video'){
   $filetype = 3;
-  $title = '<i class="fa fa-video-camera"></i> 视频播放器';
+  $panel_title = '<i class="fa fa-video-camera"></i> 视频播放器';
   $htmlcode = htmlspecialchars('<video id="movies" src="'.$viewurl_all.'" autobuffer="true" controls="" width="100
   %"></video>');
   $htmlcode2 = htmlspecialchars('<iframe src="'.$siteurl.'player.php?hash='.$hash.'" width="800" height="500" scrolling="no" frameborder="0"></iframe>');
@@ -54,17 +52,13 @@ if($view_type == 'image'){
   $linktitle = '视频链接';
 }else{
   $filetype = 0;
-  $title = '<i class="fa fa-file"></i> 文件查看';
   $htmlcode = htmlspecialchars('<a href="'.$downurl_all.'" target="_blank">'.$name.'</a>');
   $ubbcode = '[url='.$downurl_all.']'.$name.'[/url]';
   if($view_type == 'office'){
     $office_url = 'https://view.officeapps.live.com/op/view.aspx?src='.rawurlencode($downurl_all);
   }
 }
-?>
-<div class="container">
-    <div class="row">
-<?php
+
 if($row['pwd']!=null && $row['pwd']!=$pwd){ ?>
   <meta http-equiv="content-type" content="text/html;charset=utf-8"/>
   <title>请输入密码下载文件</title>
@@ -80,7 +74,14 @@ if($row['pwd']!=null && $row['pwd']!=$pwd){ ?>
   exit;
 }
 
+$manager_authorized = is_frontend_manager();
+$is_file=true;
+$title = $page_title;
+include SYSTEM_ROOT.'header.php';
+$title = $panel_title;
 ?>
+<div class="container">
+    <div class="row">
       <div class="col-sm-9">
 <div class="panel panel-primary">
 <div class="panel-heading">
@@ -123,8 +124,10 @@ if($filetype==1){
                   </li>
                   <li><a href="#info" data-toggle="tab"><i class="fa fa-info-circle" aria-hidden="true"></i> 文件详情</a>
                   </li>
-                  <li class="<?php echo $is_mine?'':'hide';?>"><a href="#manager" data-toggle="tab"><i class="fa fa-cog" aria-hidden="true"></i> 管理</a>
+<?php if($manager_authorized){ ?>
+                  <li><a href="#manager" id="managerTab" data-toggle="tab" aria-controls="manager" role="tab"><i class="fa fa-cog" aria-hidden="true"></i> 站长管理</a>
                   </li>
+<?php } ?>
               </ul>
               <div id="myTabContent" class="tab-content" style="padding: 19px;">
                   <div class="tab-pane fade active in" id="link">
@@ -200,15 +203,18 @@ if($filetype==1){
                           </table>
                       </div>
                   </div>
+<?php if($manager_authorized){ ?>
                   <div class="tab-pane fade" id="manager">
                       <div class="row" align="center">
                           <div class="col-md-12">
+                            <p class="text-success"><i class="fa fa-check-circle"></i> 站长授权已通过，可管理当前文件。</p>
                             <input type="hidden" id="hash" name="hash" value="<?php echo $hash?>">
                             <input type="hidden" id="csrf_token" name="csrf_token" value="<?php echo $csrf_token?>">
                             <button onclick="delete_confirm()" class="btn btn-raised btn-danger"><i class="fa fa-close" aria-hidden="true"></i> 删除文件</button>
                           </div>
                       </div>
                   </div>
+<?php } ?>
               </div>
           </div>
       </div>
@@ -227,12 +233,13 @@ if($filetype==1){
 <h3 class="panel-title"><i class="fa fa-qrcode"></i> 手机扫码下载</h3>
 </div>
 <div class="panel-body text-center">
-<img alt="二维码" src="//api.qrserver.com/v1/create-qr-code/?size=180x180&margin=10&data=<?php echo urlencode($thisurl);?>">
+<img alt="二维码" width="180" height="180" loading="lazy" decoding="async" src="//api.qrserver.com/v1/create-qr-code/?size=180x180&margin=10&data=<?php echo urlencode($thisurl);?>">
 </div>
 </div>
       </div>
     </div>
   </div>
+
 <?php include SYSTEM_ROOT.'footer.php';?>
 <?php if($filetype==2){?>
 <script type="text/javascript" src="https://s4.zstatic.net/ajax/libs/aplayer/1.10.1/APlayer.min.js"></script>
@@ -266,7 +273,17 @@ var ap = new APlayer({
 <script src="https://s4.zstatic.net/ajax/libs/layer/2.3/layer.js"></script>
 <script src="https://s4.zstatic.net/ajax/libs/clipboard.js/1.7.1/clipboard.min.js"></script>
 <script>
+var managerAuthorized = <?php echo $manager_authorized?'true':'false';?>;
+
+function openManagerAuth(){
+  $('#managerAuthModal').modal('show');
+}
+
 function delete_confirm(){
+  if(!managerAuthorized){
+    openManagerAuth();
+    return;
+  }
   var hash = $("#hash").val();
   var csrf_token = $("#csrf_token").val();
   var confirmobj = layer.confirm('删除文件后不可恢复，确定删除吗？', {
@@ -280,7 +297,10 @@ function delete_confirm(){
       dataType : 'json',
       success : function(data) {
         layer.close(ii);
-        if(data.code == 0){
+        if(data.code == 401){
+          managerAuthorized = false;
+          openManagerAuth();
+        }else if(data.code == 0){
           layer.alert('删除成功', {icon:1}, function(){window.location.href="./";});
         }else{
           layer.alert(data.msg, {icon:2});
@@ -296,6 +316,9 @@ function delete_confirm(){
 	});
 }
 $(document).ready(function(){
+  if(window.location.hash === '#manager' && managerAuthorized){
+    $('#managerTab').tab('show');
+  }
   var clipboard = new Clipboard('.copy-btn');
   clipboard.on('success', function (e) {
     layer.msg('复制成功！', {icon: 1});

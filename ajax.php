@@ -225,15 +225,37 @@ case 'complete_upload':
 	exit(json_encode($result));
 break;
 
+case 'managerLogout':
+	if(!isset($_POST['manager_csrf_token']) || $_POST['manager_csrf_token']!=$_SESSION['manager_csrf_token'])exit('{"code":403,"msg":"页面已过期，请刷新后重试"}');
+	clear_frontend_manager();
+	exit('{"code":0,"msg":"已退出站长模式"}');
+break;
+
+case 'managerAuth':
+	if(!isset($_POST['manager_csrf_token']) || $_POST['manager_csrf_token']!=$_SESSION['manager_csrf_token'])exit('{"code":403,"msg":"页面已过期，请刷新后重试"}');
+	$retry_after = frontend_manager_auth_remaining($clientip);
+	if($retry_after > 0)exit('{"code":429,"msg":"密码错误次数过多，请'.max(1, ceil($retry_after/60)).'分钟后再试"}');
+	$manager_password = isset($_POST['manager_password']) ? trim((string)$_POST['manager_password']) : '';
+	if(!verify_frontend_manager_password($manager_password)){
+		frontend_manager_auth_record_failure($clientip);
+		$retry_after = frontend_manager_auth_remaining($clientip);
+		if($retry_after > 0)exit('{"code":429,"msg":"密码错误次数过多，请'.max(1, ceil($retry_after/60)).'分钟后再试"}');
+		exit('{"code":-1,"msg":"管理员密码错误"}');
+	}
+	frontend_manager_auth_clear_failures($clientip);
+	grant_frontend_manager();
+	exit('{"code":0,"msg":"授权成功"}');
+break;
+
 case 'deleteFile':
 	$hash = isset($_POST['hash'])?trim($_POST['hash']):exit('{"code":-1,"msg":"no hash"}');
 	if(!$_POST['csrf_token'] || $_POST['csrf_token']!=$_SESSION['csrf_token'])exit('{"code":-1,"msg":"CSRF TOKEN ERROR"}');
 	if(!preg_match('/^[0-9a-z]{32}$/i', $hash))exit('{"code":-1,"msg":"hash error"}');
 	$row = $DB->getRow("SELECT * FROM `pre_file` WHERE `hash`=:hash", [':hash'=>$hash]);
 	if(!$row)exit('{"code":-1,"msg":"文件不存在"}');
-	if($islogin2 && $row['uid']!=$uid || !$islogin2 && (!isset($_SESSION['fileids']) || !in_array($row['id'], $_SESSION['fileids'])))exit('{"code":-1,"msg":"无权限"}');
-	if($row['block']==1)exit('{"code":-1,"msg":"文件已被冻结，无法删除"}');
-	if(!$islogin2 && strtotime($row['addtime'])<strtotime("-7 days"))exit('{"code":-1,"msg":"无法删除7天前的文件"}');
+	if(!is_frontend_manager())exit('{"code":401,"msg":"请先输入管理员密码"}');
+
+
 	$result = $stor->delete($row['hash']);
 	$sql = "DELETE FROM pre_file WHERE id=:id";
 	if($DB->exec($sql, [':id'=>$row['id']]))exit('{"code":0,"msg":"删除文件成功！"}');
